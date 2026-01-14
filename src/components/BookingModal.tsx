@@ -1,8 +1,8 @@
-
 import React, { useState, useEffect } from 'react';
 import { SERVICES, TEAM } from '../constants';
 import { Service, Barber, SelectedProduct } from '../types';
 import { generateWhatsAppMessage } from '../services/gemini';
+import { supabase } from '../services/supabase'; // Importando sua conexão
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -19,7 +19,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   initialProducts = [],
   onClearSelection
 }) => {
-  const [step, setStep] = useState(1); // 1: Contato, 2: Itens, 3: Barbeiro, 4: Agenda, 5: IA Message
+  const [step, setStep] = useState(1); 
   
   // Form Contato
   const [formData, setFormData] = useState({
@@ -39,25 +39,96 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
 
+  // Estado para armazenar horários ocupados
+  const [busyTimes, setBusyTimes] = useState<string[]>([]);
+  const [isLoadingTimes, setIsLoadingTimes] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       setSelectedServices(initialServices);
       setSelectedProducts(initialProducts);
       if (initialServices.length > 0 || initialProducts.length > 0) {
-        // Se já vem com itens, podemos ir direto ou pedir contato
         setStep(1);
       }
     }
   }, [isOpen, initialServices, initialProducts]);
+
+  // FUNÇÃO NOVA: Verificar disponibilidade no Supabase
+  useEffect(() => {
+    const fetchBusyTimes = async () => {
+      if (!date || !selectedBarber) return;
+      
+      setIsLoadingTimes(true);
+      
+      // Converter data DD/MM/YYYY para formato de busca YYYY-MM-DD
+      const [day, month, year] = date.split('/');
+      const searchDate = `${year}-${month}-${day}`;
+
+      // Buscar no banco
+      const { data, error } = await supabase
+        .from('agendamentos')
+        .select('data_hora')
+        .eq('barbeiro_nome', selectedBarber.name)
+        .gte('data_hora', `${searchDate}T00:00:00`)
+        .lte('data_hora', `${searchDate}T23:59:59`);
+
+      if (error) {
+        console.error('Erro ao buscar horários:', error);
+      } else if (data) {
+        // Extrair apenas a hora (HH:MM) dos agendamentos encontrados
+        const times = data.map(item => {
+          const dateObj = new Date(item.data_hora);
+          // Ajuste de fuso horário simples para exibir a hora correta
+          return dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        });
+        setBusyTimes(times);
+      }
+      setIsLoadingTimes(false);
+    };
+
+    fetchBusyTimes();
+  }, [date, selectedBarber]);
 
   if (!isOpen) return null;
 
   const totalPrice = selectedServices.reduce((acc, s) => acc + s.price, 0) + 
                      selectedProducts.reduce((acc, p) => acc + (p.price * p.quantity), 0);
 
-  const handleGenerateMessage = async () => {
+  // FUNÇÃO ATUALIZADA: Salva no Banco e Gera Mensagem
+  const handleFinishBooking = async () => {
     setIsGenerating(true);
     setStep(5);
+
+    // 1. Criar Data ISO para o Banco
+    const [day, month, year] = date.split('/');
+    const [hours, minutes] = time.split(':');
+    const bookingDate = new Date(
+      parseInt(year), 
+      parseInt(month) - 1, 
+      parseInt(day), 
+      parseInt(hours), 
+      parseInt(minutes)
+    );
+
+    // 2. Salvar no Supabase
+    const { error } = await supabase.from('agendamentos').insert([
+      {
+        cliente_nome: `${formData.firstName} ${formData.lastName}`,
+        cliente_telefone: formData.phone,
+        barbeiro_nome: selectedBarber?.name,
+        servico_tipo: selectedServices.map(s => s.name).join(', '),
+        data_hora: bookingDate.toISOString()
+      }
+    ]);
+
+    if (error) {
+      alert('Erro ao salvar agendamento! Verifique sua conexão.');
+      console.error(error);
+      setIsGenerating(false);
+      return; // Para se der erro
+    }
+
+    // 3. Se salvou com sucesso, gera a mensagem do Zap
     const message = await generateWhatsAppMessage({
       firstName: formData.firstName,
       lastName: formData.lastName,
@@ -70,6 +141,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       time,
       total: totalPrice
     });
+    
     setAiMessage(message || '');
     setIsGenerating(false);
   };
@@ -212,17 +284,30 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
             {step === 4 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Data e Horário</h3>
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">
+                  {isLoadingTimes ? 'Verificando Disponibilidade...' : 'Data e Horário'}
+                </h3>
                 {renderCalendar()}
                 <div className="grid grid-cols-3 gap-2 mt-4">
-                  {['09:00', '10:00', '11:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'].map(t => (
-                    <button 
-                      key={t} onClick={() => setTime(t)}
-                      className={`py-2 rounded-lg text-[9px] font-black border transition-all ${time === t ? 'bg-black text-white border-black' : 'bg-gray-50 text-gray-400 border-transparent hover:border-gray-200'}`}
-                    >
-                      {t}
-                    </button>
-                  ))}
+                  {['09:00', '10:00', '11:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'].map(t => {
+                    const isBusy = busyTimes.includes(t);
+                    return (
+                      <button 
+                        key={t} 
+                        disabled={isBusy}
+                        onClick={() => setTime(t)}
+                        className={`py-2 rounded-lg text-[9px] font-black border transition-all 
+                          ${isBusy 
+                            ? 'bg-gray-100 text-gray-300 border-transparent cursor-not-allowed line-through' 
+                            : time === t 
+                              ? 'bg-black text-white border-black' 
+                              : 'bg-gray-50 text-gray-400 border-transparent hover:border-gray-200'
+                          }`}
+                      >
+                        {t}
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -232,10 +317,15 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 {isGenerating ? (
                   <div className="py-12 flex flex-col items-center gap-4">
                     <div className="w-10 h-10 border-4 border-black border-t-transparent rounded-full animate-spin" />
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">A Inteligência Artificial está preparando sua mensagem...</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
+                      Salvando agendamento e criando mensagem...
+                    </p>
                   </div>
                 ) : (
                   <>
+                    <div className="bg-green-50 p-4 rounded-xl border border-green-100 mb-2">
+                       <p className="text-[10px] font-black text-green-700 uppercase">✅ Agendamento Confirmado!</p>
+                    </div>
                     <div className="bg-gray-50 p-6 rounded-[2.5rem] border border-gray-100 text-left relative group">
                       <div className="absolute top-4 right-4 text-[8px] font-black text-blue-600 uppercase tracking-widest opacity-40">AI Generated</div>
                       <p className="text-sm font-medium text-gray-700 whitespace-pre-wrap italic leading-relaxed">
@@ -276,10 +366,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   (step === 3 && !selectedBarber) ||
                   (step === 4 && (!date || !time))
                 }
-                onClick={() => step === 4 ? handleGenerateMessage() : setStep(step + 1)}
+                onClick={() => step === 4 ? handleFinishBooking() : setStep(step + 1)}
                 className="flex-1 bg-black text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-xl disabled:opacity-20 transition-all"
               >
-                {step === 4 ? 'GERAR MENSAGEM IA' : 'PRÓXIMO ➔'}
+                {step === 4 ? 'FINALIZAR AGENDAMENTO' : 'PRÓXIMO ➔'}
               </button>
             </div>
           )}

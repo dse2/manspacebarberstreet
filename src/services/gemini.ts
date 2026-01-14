@@ -1,58 +1,56 @@
-
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Função segura para pegar a IA apenas quando necessário
+const getAI = () => {
+  // Tenta pegar a chave do Vite
+  const apiKey = import.meta.env.VITE_GOOGLE_API_KEY;
+  
+  // Se não tiver chave, retorna null (não tenta criar e não dá erro)
+  if (!apiKey) return null;
+  
+  // Se tiver chave, cria a instância
+  return new GoogleGenAI({ apiKey });
+};
 
 export const getStyleAssistantResponse = async (userMessage: string) => {
   try {
+    const ai = getAI();
+    // Se não tiver IA configurada, responde o básico para não travar
+    if (!ai) return "Sistema de IA temporariamente indisponível (Chave não configurada).";
+
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash",
       contents: userMessage,
       config: {
-        systemInstruction: "Você é o assistente virtual da Man's Space - Barber Street. Seja educado, use um tom profissional e moderno (estilo barbearia premium). Ajude os clientes a escolherem cortes e barbas. Se perguntarem sobre preços, cite Corte R$40 e Barba R$40. Localização: Vale do Jatobá, BH.",
+        systemInstruction: "Você é o assistente virtual da Man's Space...",
       },
     });
-    return response.text;
+    return response.text() || "Sem resposta.";
   } catch (error) {
-    console.error("Gemini API Error:", error);
-    return "Desculpe, tive um problema técnico. Como posso ajudar hoje?";
+    console.error("Erro IA:", error);
+    return "Desculpe, não consegui responder agora.";
   }
 };
 
-export const generateWhatsAppMessage = async (data: {
-  firstName: string;
-  lastName: string;
-  phone: string;
-  email: string;
-  barber: string;
-  services: string[];
-  products: string[];
-  date: string;
-  time: string;
-  total: number;
-}) => {
-  const prompt = `Gere uma mensagem elegante e organizada para WhatsApp solicitando um agendamento na barbearia Man's Space.
-  Dados do Cliente: ${data.firstName} ${data.lastName}
-  Contato: ${data.phone} | ${data.email}
-  Barbeiro: ${data.barber}
-  Serviços: ${data.services.join(', ')}
-  Produtos Adicionais: ${data.products.length > 0 ? data.products.join(', ') : 'Nenhum'}
-  Data: ${data.date} às ${data.time}
-  Valor Estimado: R$ ${data.total.toFixed(2)}
-  
-  Instruções: Use emojis de barbearia (💈, ✂️, 🪒), seja muito profissional e cordial. A mensagem deve ser escrita do ponto de vista do cliente para a barbearia. Organize os itens em lista.`;
-
+export const generateWhatsAppMessage = async (data: any) => {
   try {
+    const ai = getAI();
+    
+    // MENSAGEM PADRÃO (FALLBACK) - Caso a IA falhe ou não tenha chave
+    const fallbackMsg = `Olá Man's Space! Gostaria de agendar.\n\n*Cliente:* ${data.firstName} ${data.lastName}\n*Serviços:* ${data.services.join(', ')}\n*Data:* ${data.date} às ${data.time}\n*Barbeiro:* ${data.barber}`;
+
+    if (!ai) return fallbackMsg;
+
+    const prompt = `Gere mensagem de WhatsApp para agendamento de barbearia.
+    Cliente: ${data.firstName}, Data: ${data.date} às ${data.time}.
+    Serviços: ${data.services.join(', ')}. Barbeiro: ${data.barber}.
+    Seja curto e cordial.`;
+
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash",
       contents: prompt,
-      config: {
-        temperature: 0.7,
-      },
     });
-    return response.text;
+    return response.text() || fallbackMsg;
   } catch (error) {
-    console.error("Gemini Booking Message Error:", error);
-    return `Olá Man's Space! Gostaria de agendar um horário.\n\nCliente: ${data.firstName}\nServiço: ${data.services.join(', ')}\nData: ${data.date} às ${data.time}\nBarbeiro: ${data.barber}`;
-  }
-};
+    console.error("Erro IA:", error);
+    // Em c
