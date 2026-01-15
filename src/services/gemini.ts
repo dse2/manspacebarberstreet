@@ -22,7 +22,7 @@ export const getStyleAssistantResponse = async (userMessage: string) => {
       model: "gemini-1.5-flash",
       contents: userMessage,
       config: {
-        systemInstruction: "Você é o assistente virtual da Man's Space...",
+        systemInstruction: "Você é o assistente virtual da Man's Space - Barber Street. Seja educado, use um tom profissional e moderno. Ajude clientes com cortes e barbas. Preços: Corte R$40, Barba R$40. Local: Vale do Jatobá, BH.",
       },
     });
     return response.text() || "Sem resposta.";
@@ -53,4 +53,7 @@ export const generateWhatsAppMessage = async (data: any) => {
     return response.text() || fallbackMsg;
   } catch (error) {
     console.error("Erro IA:", error);
-    // Em c
+    // Em caso de erro, retorna a mensagem básica garantida
+    return `Olá Man's Space! Gostaria de agendar.\n\n*Cliente:* ${data.firstName}\n*Data:* ${data.date} às ${data.time}`; 
+  }
+};
