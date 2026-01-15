@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { SERVICES, TEAM } from '../constants';
 import { Service, Barber, SelectedProduct } from '../types';
 import { generateWhatsAppMessage } from '../services/gemini';
-import { supabase } from '../services/supabase'; // Importando sua conexão
+import { supabase } from '../services/supabase';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -21,7 +21,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 }) => {
   const [step, setStep] = useState(1); 
   
-  // Form Contato
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -39,7 +38,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentCalendarDate, setCurrentCalendarDate] = useState(new Date());
 
-  // Estado para armazenar horários ocupados
   const [busyTimes, setBusyTimes] = useState<string[]>([]);
   const [isLoadingTimes, setIsLoadingTimes] = useState(false);
 
@@ -53,37 +51,37 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     }
   }, [isOpen, initialServices, initialProducts]);
 
-  // FUNÇÃO NOVA: Verificar disponibilidade no Supabase
   useEffect(() => {
     const fetchBusyTimes = async () => {
       if (!date || !selectedBarber) return;
       
       setIsLoadingTimes(true);
       
-      // Converter data DD/MM/YYYY para formato de busca YYYY-MM-DD
-      const [day, month, year] = date.split('/');
-      const searchDate = `${year}-${month}-${day}`;
+      try {
+        const [day, month, year] = date.split('/');
+        const searchDate = `${year}-${month}-${day}`;
 
-      // Buscar no banco
-      const { data, error } = await supabase
-        .from('agendamentos')
-        .select('data_hora')
-        .eq('barbeiro_nome', selectedBarber.name)
-        .gte('data_hora', `${searchDate}T00:00:00`)
-        .lte('data_hora', `${searchDate}T23:59:59`);
+        const { data, error } = await supabase
+          .from('agendamentos')
+          .select('data_hora')
+          .eq('barbeiro_nome', selectedBarber.name)
+          .gte('data_hora', `${searchDate}T00:00:00`)
+          .lte('data_hora', `${searchDate}T23:59:59`);
 
-      if (error) {
-        console.error('Erro ao buscar horários:', error);
-      } else if (data) {
-        // Extrair apenas a hora (HH:MM) dos agendamentos encontrados
-        const times = data.map(item => {
-          const dateObj = new Date(item.data_hora);
-          // Ajuste de fuso horário simples para exibir a hora correta
-          return dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        });
-        setBusyTimes(times);
+        if (error) throw error;
+
+        if (data) {
+          const times = data.map(item => {
+            const dateObj = new Date(item.data_hora);
+            return dateObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+          });
+          setBusyTimes(times);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar horários:', err);
+      } finally {
+        setIsLoadingTimes(false);
       }
-      setIsLoadingTimes(false);
     };
 
     fetchBusyTimes();
@@ -94,56 +92,53 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const totalPrice = selectedServices.reduce((acc, s) => acc + s.price, 0) + 
                      selectedProducts.reduce((acc, p) => acc + (p.price * p.quantity), 0);
 
-  // FUNÇÃO ATUALIZADA: Salva no Banco e Gera Mensagem
   const handleFinishBooking = async () => {
     setIsGenerating(true);
     setStep(5);
 
-    // 1. Criar Data ISO para o Banco
-    const [day, month, year] = date.split('/');
-    const [hours, minutes] = time.split(':');
-    const bookingDate = new Date(
-      parseInt(year), 
-      parseInt(month) - 1, 
-      parseInt(day), 
-      parseInt(hours), 
-      parseInt(minutes)
-    );
+    try {
+      const [day, month, year] = date.split('/');
+      const [hours, minutes] = time.split(':');
+      const bookingDate = new Date(
+        parseInt(year), 
+        parseInt(month) - 1, 
+        parseInt(day), 
+        parseInt(hours), 
+        parseInt(minutes)
+      );
 
-    // 2. Salvar no Supabase
-    const { error } = await supabase.from('agendamentos').insert([
-      {
-        cliente_nome: `${formData.firstName} ${formData.lastName}`,
-        cliente_telefone: formData.phone,
-        barbeiro_nome: selectedBarber?.name,
-        servico_tipo: selectedServices.map(s => s.name).join(', '),
-        data_hora: bookingDate.toISOString()
-      }
-    ]);
+      const { error } = await supabase.from('agendamentos').insert([
+        {
+          cliente_nome: `${formData.firstName} ${formData.lastName}`,
+          cliente_telefone: formData.phone,
+          barbeiro_nome: selectedBarber?.name,
+          servico_tipo: selectedServices.map(s => s.name).join(', '),
+          data_hora: bookingDate.toISOString()
+        }
+      ]);
 
-    if (error) {
-      alert('Erro ao salvar agendamento! Verifique sua conexão.');
+      if (error) throw error;
+
+      const message = await generateWhatsAppMessage({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phone: formData.phone,
+        email: formData.email,
+        barber: selectedBarber?.name || 'Qualquer profissional',
+        services: selectedServices.map(s => s.name),
+        products: selectedProducts.map(p => `${p.quantity}x ${p.name}`),
+        date,
+        time,
+        total: totalPrice
+      });
+      
+      setAiMessage(message || '');
+    } catch (error) {
+      alert('Erro ao agendar. Tente novamente.');
       console.error(error);
+    } finally {
       setIsGenerating(false);
-      return; // Para se der erro
     }
-
-    // 3. Se salvou com sucesso, gera a mensagem do Zap
-    const message = await generateWhatsAppMessage({
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      phone: formData.phone,
-      email: formData.email,
-      barber: selectedBarber?.name || 'Qualquer profissional',
-      services: selectedServices.map(s => s.name),
-      products: selectedProducts.map(p => `${p.quantity}x ${p.name}`),
-      date,
-      time,
-      total: totalPrice
-    });
-    
-    setAiMessage(message || '');
-    setIsGenerating(false);
   };
 
   const handleCopy = () => {
@@ -201,22 +196,25 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className={`bg-white w-full max-w-sm rounded-[3rem] border border-gray-100 overflow-hidden shadow-2xl animate-in zoom-in-95 duration-500 flex flex-col max-h-[90vh]`}>
-        <div className="p-6 md:p-8 flex flex-col h-full">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-black text-black tracking-tight uppercase italic leading-none">Agendamento IA</h2>
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className={`bg-white w-full max-w-sm rounded-[2rem] border border-gray-100 overflow-hidden shadow-2xl flex flex-col h-[85vh]`}>
+        
+        {/* CABEÇALHO */}
+        <div className="p-6 pb-2">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-black text-black tracking-tight uppercase italic leading-none">Agendamento</h2>
             <button onClick={onClose} className="text-gray-300 hover:text-black text-3xl font-light">&times;</button>
           </div>
-
-          <div className="flex justify-between mb-8 gap-2">
-            {[1, 2, 3, 4, 5].map(s => <div key={s} className={`h-1 flex-1 rounded-full ${step >= s ? 'bg-black' : 'bg-gray-100'}`} />)}
+          <div className="flex justify-between gap-2">
+            {[1, 2, 3, 4, 5].map(s => <div key={s} className={`h-1 flex-1 rounded-full ${step >= s ? 'bg-black' : 'bg-gray-200'}`} />)}
           </div>
+        </div>
 
-          <div className="flex-1 overflow-y-auto pr-1 no-scrollbar pb-6">
+        {/* CONTEÚDO COM SCROLL */}
+        <div className="flex-1 overflow-y-auto px-6 py-2 no-scrollbar">
             {step === 1 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Informações de Contato</h3>
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Seus Dados</h3>
                 <div className="grid grid-cols-2 gap-3">
                   <input 
                     type="text" placeholder="Nome" 
@@ -244,8 +242,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
             {step === 2 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Serviços e Adicionais</h3>
-                <div className="space-y-2">
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Selecione os Serviços</h3>
+                <div className="space-y-2 pb-4">
                   {SERVICES.slice(0, 8).map(s => {
                     const isSelected = selectedServices.some(item => item.id === s.id);
                     return (
@@ -265,8 +263,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
             {step === 3 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Escolha seu Barbeiro</h3>
-                <div className="grid grid-cols-2 gap-3">
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Escolha o Profissional</h3>
+                <div className="grid grid-cols-2 gap-3 pb-4">
                   {TEAM.map(b => (
                     <button 
                       key={b.id} onClick={() => setSelectedBarber(b)}
@@ -285,10 +283,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             {step === 4 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
                 <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">
-                  {isLoadingTimes ? 'Verificando Disponibilidade...' : 'Data e Horário'}
+                  {isLoadingTimes ? 'Consultando agenda...' : 'Data e Horário'}
                 </h3>
                 {renderCalendar()}
-                <div className="grid grid-cols-3 gap-2 mt-4">
+                <div className="grid grid-cols-3 gap-2 mt-4 pb-4">
                   {['09:00', '10:00', '11:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'].map(t => {
                     const isBusy = busyTimes.includes(t);
                     return (
@@ -313,12 +311,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             )}
 
             {step === 5 && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 text-center">
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 text-center pb-4">
                 {isGenerating ? (
                   <div className="py-12 flex flex-col items-center gap-4">
                     <div className="w-10 h-10 border-4 border-black border-t-transparent rounded-full animate-spin" />
                     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
-                      Salvando agendamento e criando mensagem...
+                      Finalizando agendamento...
                     </p>
                   </div>
                 ) : (
@@ -327,7 +325,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                        <p className="text-[10px] font-black text-green-700 uppercase">✅ Agendamento Confirmado!</p>
                     </div>
                     <div className="bg-gray-50 p-6 rounded-[2.5rem] border border-gray-100 text-left relative group">
-                      <div className="absolute top-4 right-4 text-[8px] font-black text-blue-600 uppercase tracking-widest opacity-40">AI Generated</div>
+                      <div className="absolute top-4 right-4 text-[8px] font-black text-blue-600 uppercase tracking-widest opacity-40">IA Generated</div>
                       <p className="text-sm font-medium text-gray-700 whitespace-pre-wrap italic leading-relaxed">
                         {aiMessage}
                       </p>
@@ -339,41 +337,35 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                       >
                         Enviar pelo WhatsApp ➔
                       </button>
-                      <button 
-                        onClick={handleCopy}
-                        className="w-full bg-black text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-lg hover:bg-gray-800 transition-all"
-                      >
-                        Copiar Texto
-                      </button>
                     </div>
                   </>
                 )}
               </div>
             )}
-          </div>
-
-          {step < 5 && (
-            <div className="pt-6 border-t border-gray-100 mt-auto flex gap-3">
-              {step > 1 && (
-                <button onClick={() => setStep(step - 1)} className="px-6 py-4 rounded-2xl border-2 border-gray-100 font-black text-[10px] uppercase text-gray-400 hover:text-black hover:border-black transition-all">
-                  ←
-                </button>
-              )}
-              <button 
-                disabled={
-                  (step === 1 && (!formData.firstName || !formData.phone)) ||
-                  (step === 2 && selectedServices.length === 0) ||
-                  (step === 3 && !selectedBarber) ||
-                  (step === 4 && (!date || !time))
-                }
-                onClick={() => step === 4 ? handleFinishBooking() : setStep(step + 1)}
-                className="flex-1 bg-black text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-xl disabled:opacity-20 transition-all"
-              >
-                {step === 4 ? 'FINALIZAR AGENDAMENTO' : 'PRÓXIMO ➔'}
-              </button>
-            </div>
-          )}
         </div>
+
+        {/* RODAPÉ DOS BOTÕES (AGORA FIXO E VISÍVEL) */}
+        {step < 5 && (
+          <div className="p-6 pt-4 border-t border-gray-100 bg-white z-10 flex gap-3">
+            {step > 1 && (
+              <button onClick={() => setStep(step - 1)} className="px-6 py-4 rounded-2xl border-2 border-gray-100 font-black text-[10px] uppercase text-gray-400 hover:text-black hover:border-black transition-all">
+                ←
+              </button>
+            )}
+            <button 
+              disabled={
+                (step === 1 && (!formData.firstName || !formData.phone)) ||
+                (step === 2 && selectedServices.length === 0) ||
+                (step === 3 && !selectedBarber) ||
+                (step === 4 && (!date || !time))
+              }
+              onClick={() => step === 4 ? handleFinishBooking() : setStep(step + 1)}
+              className="flex-1 bg-black text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-xl disabled:opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all"
+            >
+              {step === 4 ? 'FINALIZAR' : 'PRÓXIMO ➔'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
