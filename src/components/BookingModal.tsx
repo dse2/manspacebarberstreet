@@ -54,13 +54,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   useEffect(() => {
     const fetchBusyTimes = async () => {
       if (!date || !selectedBarber) return;
-      
       setIsLoadingTimes(true);
-      
       try {
         const [day, month, year] = date.split('/');
         const searchDate = `${year}-${month}-${day}`;
-
         const { data, error } = await supabase
           .from('agendamentos')
           .select('data_hora')
@@ -69,7 +66,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
           .lte('data_hora', `${searchDate}T23:59:59`);
 
         if (error) throw error;
-
         if (data) {
           const times = data.map(item => {
             const dateObj = new Date(item.data_hora);
@@ -83,7 +79,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         setIsLoadingTimes(false);
       }
     };
-
     fetchBusyTimes();
   }, [date, selectedBarber]);
 
@@ -95,27 +90,21 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const handleFinishBooking = async () => {
     setIsGenerating(true);
     setStep(5);
-
     try {
       const [day, month, year] = date.split('/');
       const [hours, minutes] = time.split(':');
       const bookingDate = new Date(
-        parseInt(year), 
-        parseInt(month) - 1, 
-        parseInt(day), 
-        parseInt(hours), 
-        parseInt(minutes)
+        parseInt(year), parseInt(month) - 1, parseInt(day), 
+        parseInt(hours), parseInt(minutes)
       );
 
-      const { error } = await supabase.from('agendamentos').insert([
-        {
-          cliente_nome: `${formData.firstName} ${formData.lastName}`,
-          cliente_telefone: formData.phone,
-          barbeiro_nome: selectedBarber?.name,
-          servico_tipo: selectedServices.map(s => s.name).join(', '),
-          data_hora: bookingDate.toISOString()
-        }
-      ]);
+      const { error } = await supabase.from('agendamentos').insert([{
+        cliente_nome: `${formData.firstName} ${formData.lastName}`,
+        cliente_telefone: formData.phone,
+        barbeiro_nome: selectedBarber?.name,
+        servico_tipo: selectedServices.map(s => s.name).join(', '),
+        data_hora: bookingDate.toISOString()
+      }]);
 
       if (error) throw error;
 
@@ -127,11 +116,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         barber: selectedBarber?.name || 'Qualquer profissional',
         services: selectedServices.map(s => s.name),
         products: selectedProducts.map(p => `${p.quantity}x ${p.name}`),
-        date,
-        time,
-        total: totalPrice
+        date, time, total: totalPrice
       });
-      
       setAiMessage(message || '');
     } catch (error) {
       alert('Erro ao agendar. Tente novamente.');
@@ -159,7 +145,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     const totalDays = new Date(year, month + 1, 0).getDate();
     const startDay = new Date(year, month, 1).getDay();
     const monthName = currentCalendarDate.toLocaleString('pt-br', { month: 'long' });
-
     const days = [];
     for (let i = 0; i < startDay; i++) days.push(<div key={`empty-${i}`} className="h-8" />);
     for (let d = 1; d <= totalDays; d++) {
@@ -167,19 +152,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       const isPast = currentDayDate < today;
       const dateString = `${String(d).padStart(2, '0')}/${String(month + 1).padStart(2, '0')}/${year}`;
       const isSelected = date === dateString;
-
       days.push(
-        <button 
-          key={d} 
-          disabled={isPast} 
-          onClick={() => setDate(dateString)} 
-          className={`h-8 w-8 rounded-lg flex items-center justify-center text-[10px] font-black transition-all ${isPast ? 'text-gray-200 cursor-not-allowed' : isSelected ? 'bg-black text-white scale-110 shadow-lg' : 'hover:bg-gray-100 text-black'}`}
-        >
+        <button key={d} disabled={isPast} onClick={() => setDate(dateString)} 
+          className={`h-8 w-8 rounded-lg flex items-center justify-center text-[10px] font-black transition-all ${isPast ? 'text-gray-200 cursor-not-allowed' : isSelected ? 'bg-black text-white scale-110 shadow-lg' : 'hover:bg-gray-100 text-black'}`}>
           {d}
         </button>
       );
     }
-
     return (
       <div className="bg-white rounded-2xl p-4 border border-gray-100">
         <div className="flex justify-between items-center mb-4">
@@ -197,12 +176,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className={`bg-white w-full max-w-sm rounded-[2rem] border border-gray-100 overflow-hidden shadow-2xl flex flex-col h-[85vh]`}>
+      {/* Container Principal com relative para o botão absoluto funcionar */}
+      <div className={`bg-white w-full max-w-sm rounded-[2rem] border border-gray-100 overflow-hidden shadow-2xl flex flex-col h-[85vh] relative`}>
         
         {/* CABEÇALHO */}
-        <div className="p-6 pb-2">
+        <div className="p-6 pb-2 shrink-0">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-black text-black tracking-tight uppercase italic leading-none">Agendamento</h2>
+            <h2 className="text-xl font-black text-black tracking-tight uppercase italic leading-none">Agendamento IA</h2>
             <button onClick={onClose} className="text-gray-300 hover:text-black text-3xl font-light">&times;</button>
           </div>
           <div className="flex justify-between gap-2">
@@ -210,48 +190,29 @@ export const BookingModal: React.FC<BookingModalProps> = ({
           </div>
         </div>
 
-        {/* CONTEÚDO COM SCROLL */}
-        <div className="flex-1 overflow-y-auto px-6 py-2 no-scrollbar">
+        {/* CONTEÚDO COM SCROLL (com padding bottom grande para não esconder atrás do botão) */}
+        <div className="flex-1 overflow-y-auto px-6 py-2 no-scrollbar pb-32">
             {step === 1 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Seus Dados</h3>
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Informações de Contato</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  <input 
-                    type="text" placeholder="Nome" 
-                    value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})}
-                    className="col-span-1 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-black" 
-                  />
-                  <input 
-                    type="text" placeholder="Sobrenome" 
-                    value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})}
-                    className="col-span-1 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-black" 
-                  />
-                  <input 
-                    type="tel" placeholder="Celular (WhatsApp)" 
-                    value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})}
-                    className="col-span-2 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-black" 
-                  />
-                  <input 
-                    type="email" placeholder="E-mail" 
-                    value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})}
-                    className="col-span-2 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-black" 
-                  />
+                  <input type="text" placeholder="Nome" value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} className="col-span-1 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-black" />
+                  <input type="text" placeholder="Sobrenome" value={formData.lastName} onChange={e => setFormData({...formData, lastName: e.target.value})} className="col-span-1 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-black" />
+                  <input type="tel" placeholder="Celular (WhatsApp)" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="col-span-2 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-black" />
+                  <input type="email" placeholder="E-mail" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="col-span-2 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-black" />
                 </div>
               </div>
             )}
 
             {step === 2 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Selecione os Serviços</h3>
-                <div className="space-y-2 pb-4">
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Serviços e Adicionais</h3>
+                <div className="space-y-2">
                   {SERVICES.slice(0, 8).map(s => {
                     const isSelected = selectedServices.some(item => item.id === s.id);
                     return (
-                      <button 
-                        key={s.id} 
-                        onClick={() => setSelectedServices(prev => isSelected ? prev.filter(x => x.id !== s.id) : [...prev, s])}
-                        className={`w-full text-left p-3 rounded-xl border-2 transition-all flex justify-between items-center ${isSelected ? 'border-black bg-gray-50' : 'border-gray-100 bg-white'}`}
-                      >
+                      <button key={s.id} onClick={() => setSelectedServices(prev => isSelected ? prev.filter(x => x.id !== s.id) : [...prev, s])}
+                        className={`w-full text-left p-3 rounded-xl border-2 transition-all flex justify-between items-center ${isSelected ? 'border-black bg-gray-50' : 'border-gray-100 bg-white'}`}>
                         <span className="font-black uppercase text-[10px]">{s.name}</span>
                         <span className="text-blue-600 font-black text-[10px]">R$ {s.price.toFixed(0)}</span>
                       </button>
@@ -263,13 +224,11 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
             {step === 3 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Escolha o Profissional</h3>
-                <div className="grid grid-cols-2 gap-3 pb-4">
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Escolha seu Barbeiro</h3>
+                <div className="grid grid-cols-2 gap-3">
                   {TEAM.map(b => (
-                    <button 
-                      key={b.id} onClick={() => setSelectedBarber(b)}
-                      className={`p-4 rounded-2xl border-2 flex flex-col items-center transition-all ${selectedBarber?.id === b.id ? 'border-black bg-gray-50 scale-105' : 'border-gray-100 bg-white hover:border-gray-200'}`}
-                    >
+                    <button key={b.id} onClick={() => setSelectedBarber(b)}
+                      className={`p-4 rounded-2xl border-2 flex flex-col items-center transition-all ${selectedBarber?.id === b.id ? 'border-black bg-gray-50 scale-105' : 'border-gray-100 bg-white hover:border-gray-200'}`}>
                       <div className="w-12 h-12 rounded-full overflow-hidden mb-2 bg-gray-100 flex items-center justify-center font-black">
                         {b.image ? <img src={b.image} alt={b.name} className="w-full h-full object-cover" /> : b.initials}
                       </div>
@@ -282,26 +241,14 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
             {step === 4 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
-                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">
-                  {isLoadingTimes ? 'Consultando agenda...' : 'Data e Horário'}
-                </h3>
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">{isLoadingTimes ? 'Verificando Disponibilidade...' : 'Data e Horário'}</h3>
                 {renderCalendar()}
-                <div className="grid grid-cols-3 gap-2 mt-4 pb-4">
+                <div className="grid grid-cols-3 gap-2 mt-4">
                   {['09:00', '10:00', '11:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00'].map(t => {
                     const isBusy = busyTimes.includes(t);
                     return (
-                      <button 
-                        key={t} 
-                        disabled={isBusy}
-                        onClick={() => setTime(t)}
-                        className={`py-2 rounded-lg text-[9px] font-black border transition-all 
-                          ${isBusy 
-                            ? 'bg-gray-100 text-gray-300 border-transparent cursor-not-allowed line-through' 
-                            : time === t 
-                              ? 'bg-black text-white border-black' 
-                              : 'bg-gray-50 text-gray-400 border-transparent hover:border-gray-200'
-                          }`}
-                      >
+                      <button key={t} disabled={isBusy} onClick={() => setTime(t)}
+                        className={`py-2 rounded-lg text-[9px] font-black border transition-all ${isBusy ? 'bg-gray-100 text-gray-300 border-transparent cursor-not-allowed line-through' : time === t ? 'bg-black text-white border-black' : 'bg-gray-50 text-gray-400 border-transparent hover:border-gray-200'}`}>
                         {t}
                       </button>
                     )
@@ -311,13 +258,11 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             )}
 
             {step === 5 && (
-              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 text-center pb-4">
+              <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 text-center">
                 {isGenerating ? (
                   <div className="py-12 flex flex-col items-center gap-4">
                     <div className="w-10 h-10 border-4 border-black border-t-transparent rounded-full animate-spin" />
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
-                      Finalizando agendamento...
-                    </p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Salvando agendamento e criando mensagem...</p>
                   </div>
                 ) : (
                   <>
@@ -325,17 +270,15 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                        <p className="text-[10px] font-black text-green-700 uppercase">✅ Agendamento Confirmado!</p>
                     </div>
                     <div className="bg-gray-50 p-6 rounded-[2.5rem] border border-gray-100 text-left relative group">
-                      <div className="absolute top-4 right-4 text-[8px] font-black text-blue-600 uppercase tracking-widest opacity-40">IA Generated</div>
-                      <p className="text-sm font-medium text-gray-700 whitespace-pre-wrap italic leading-relaxed">
-                        {aiMessage}
-                      </p>
+                      <div className="absolute top-4 right-4 text-[8px] font-black text-blue-600 uppercase tracking-widest opacity-40">AI Generated</div>
+                      <p className="text-sm font-medium text-gray-700 whitespace-pre-wrap italic leading-relaxed">{aiMessage}</p>
                     </div>
                     <div className="space-y-3">
-                      <button 
-                        onClick={handleWhatsApp}
-                        className="w-full bg-[#25D366] text-white font-black py-5 rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-3"
-                      >
+                      <button onClick={handleWhatsApp} className="w-full bg-[#25D366] text-white font-black py-5 rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-xl hover:scale-[1.02] transition-all flex items-center justify-center gap-3">
                         Enviar pelo WhatsApp ➔
+                      </button>
+                      <button onClick={handleCopy} className="w-full bg-black text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-lg hover:bg-gray-800 transition-all">
+                        Copiar Texto
                       </button>
                     </div>
                   </>
@@ -344,9 +287,9 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             )}
         </div>
 
-        {/* RODAPÉ DOS BOTÕES (AGORA FIXO E VISÍVEL) */}
+        {/* BOTÕES FIXOS NO RODAPÉ */}
         {step < 5 && (
-          <div className="p-6 pt-4 border-t border-gray-100 bg-white z-10 flex gap-3">
+          <div className="absolute bottom-0 left-0 right-0 p-6 pt-4 border-t border-gray-100 bg-white z-20 flex gap-3 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]">
             {step > 1 && (
               <button onClick={() => setStep(step - 1)} className="px-6 py-4 rounded-2xl border-2 border-gray-100 font-black text-[10px] uppercase text-gray-400 hover:text-black hover:border-black transition-all">
                 ←
