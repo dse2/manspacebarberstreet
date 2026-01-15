@@ -176,10 +176,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      {/* Container Principal com relative para o botão absoluto funcionar */}
-      <div className={`bg-white w-full max-w-sm rounded-[2rem] border border-gray-100 overflow-hidden shadow-2xl flex flex-col h-[85vh] relative`}>
+      {/* MUDANÇA AQUI: h-[80vh] para garantir que cabe na tela */}
+      <div className="bg-white w-full max-w-sm rounded-[2rem] border border-gray-100 shadow-2xl flex flex-col h-[80vh] max-h-[800px]">
         
-        {/* CABEÇALHO */}
+        {/* PARTE 1: CABEÇALHO (Não mexe, não scrolla) */}
         <div className="p-6 pb-2 shrink-0">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-black text-black tracking-tight uppercase italic leading-none">Agendamento IA</h2>
@@ -190,8 +190,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
           </div>
         </div>
 
-        {/* CONTEÚDO COM SCROLL (com padding bottom grande para não esconder atrás do botão) */}
-        <div className="flex-1 overflow-y-auto px-6 py-2 no-scrollbar pb-32">
+        {/* PARTE 2: RECHEIO (Isso aqui scrolla se for grande) */}
+        <div className="flex-1 overflow-y-auto px-6 py-2">
             {step === 1 && (
               <div className="space-y-4 animate-in fade-in slide-in-from-right-4">
                 <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Informações de Contato</h3>
@@ -287,9 +287,9 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             )}
         </div>
 
-        {/* BOTÕES FIXOS NO RODAPÉ */}
+        {/* PARTE 3: BOTÕES (Fixo, não mexe, sempre visível) */}
         {step < 5 && (
-          <div className="absolute bottom-0 left-0 right-0 p-6 pt-4 border-t border-gray-100 bg-white z-20 flex gap-3 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.1)]">
+          <div className="p-6 pt-4 border-t border-gray-100 bg-white shrink-0 flex gap-3 z-50">
             {step > 1 && (
               <button onClick={() => setStep(step - 1)} className="px-6 py-4 rounded-2xl border-2 border-gray-100 font-black text-[10px] uppercase text-gray-400 hover:text-black hover:border-black transition-all">
                 ←
